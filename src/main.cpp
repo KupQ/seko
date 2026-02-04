@@ -350,14 +350,16 @@ void CaptureVideo() {
     g_isRecordingThreadRunning = true;
     g_recordingThread = std::thread([rect, w, h]() {
         HDC hScreen = GetDC(NULL);
-        HDC hDC = CreateCompatibleDC(hScreen);
-        HBITMAP hBmp = CreateCompatibleBitmap(hScreen, w, h);
-        HGDIOBJ hOld = SelectObject(hDC, hBmp);
         
         while (g_videoRecorder.IsRecording()) {
             auto start = std::chrono::steady_clock::now();
             
             if (!g_videoRecorder.IsPaused()) {
+                // Create fresh bitmap for each frame to avoid caching
+                HDC hDC = CreateCompatibleDC(hScreen);
+                HBITMAP hBmp = CreateCompatibleBitmap(hScreen, w, h);
+                HGDIOBJ hOld = SelectObject(hDC, hBmp);
+                
                 // Capture Frame
                 BitBlt(hDC, 0, 0, w, h, hScreen, rect.left, rect.top, SRCCOPY);
                 
@@ -375,6 +377,11 @@ void CaptureVideo() {
                 
                 // Write to Media Foundation
                 g_videoRecorder.WriteFrame(pixels);
+                
+                // Cleanup frame resources
+                SelectObject(hDC, hOld);
+                DeleteObject(hBmp);
+                DeleteDC(hDC);
             }
             
             // Frame pacing
@@ -386,9 +393,6 @@ void CaptureVideo() {
             }
         }
         
-        SelectObject(hDC, hOld);
-        DeleteObject(hBmp);
-        DeleteDC(hDC);
         ReleaseDC(NULL, hScreen);
     });
     g_recordingThread.detach(); // Detach to allow UI thread to continue handling messages
