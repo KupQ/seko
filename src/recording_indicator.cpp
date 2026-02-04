@@ -30,19 +30,22 @@ void RecordingIndicator::Show(const RECT& region) {
     }
     
     // Create layered window for transparency
+    // Position OUTSIDE the recording region to avoid appearing in video
+    int borderWidth = 6;
     m_hWnd = CreateWindowEx(
         WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW,
         L"SekoRecordingIndicator",
         L"",
         WS_POPUP,
-        region.left, region.top,
-        region.right - region.left, region.bottom - region.top,
+        region.left - borderWidth, region.top - borderWidth,
+        (region.right - region.left) + (borderWidth * 2), 
+        (region.bottom - region.top) + (borderWidth * 2),
         NULL, NULL, GetModuleHandle(NULL), this
     );
     
     if (m_hWnd) {
-        // Make window click-through
-        SetLayeredWindowAttributes(m_hWnd, 0, 255, LWA_ALPHA);
+        // Semi-transparent window
+        SetLayeredWindowAttributes(m_hWnd, 0, 180, LWA_ALPHA);
         ShowWindow(m_hWnd, SW_SHOWNOACTIVATE);
         UpdateWindow(m_hWnd);
         
@@ -87,24 +90,32 @@ LRESULT CALLBACK RecordingIndicator::WndProc(HWND hWnd, UINT message, WPARAM wPa
             Graphics graphics(hdc);
             graphics.SetSmoothingMode(SmoothingModeAntiAlias);
             
-            // Draw red border (or yellow if paused)
+            // Draw semi-transparent border (red or yellow if paused)
             Color borderColor = (pThis && pThis->m_isPaused) ? 
-                Color(255, 255, 200, 0) : Color(255, 255, 50, 50);
-            Pen borderPen(borderColor, 4);
-            graphics.DrawRectangle(&borderPen, 2, 2, rc.right - 4, rc.bottom - 4);
+                Color(200, 255, 200, 0) : Color(200, 255, 50, 50);
+            Pen borderPen(borderColor, 6);
             
-            // Draw REC indicator in top-left
+            // Draw border around the edge
+            graphics.DrawRectangle(&borderPen, 3, 3, rc.right - 6, rc.bottom - 6);
+            
+            // Draw REC indicator in top-left corner (with background)
             if (pThis && !pThis->m_isPaused) {
+                SolidBrush bgBrush(Color(180, 0, 0, 0));
+                graphics.FillRectangle(&bgBrush, 8, 8, 60, 24);
+                
                 SolidBrush recBrush(Color(255, 255, 50, 50));
-                graphics.FillEllipse(&recBrush, 10, 10, 12, 12);
+                graphics.FillEllipse(&recBrush, 14, 14, 12, 12);
                 
                 Font font(L"Segoe UI", 10, FontStyleBold);
                 SolidBrush textBrush(Color(255, 255, 255, 255));
-                graphics.DrawString(L"REC", -1, &font, PointF(28, 8), &textBrush);
+                graphics.DrawString(L"REC", -1, &font, PointF(32, 12), &textBrush);
             } else if (pThis && pThis->m_isPaused) {
+                SolidBrush bgBrush(Color(180, 0, 0, 0));
+                graphics.FillRectangle(&bgBrush, 8, 8, 80, 24);
+                
                 Font font(L"Segoe UI", 10, FontStyleBold);
                 SolidBrush textBrush(Color(255, 255, 200, 0));
-                graphics.DrawString(L"PAUSED", -1, &font, PointF(10, 8), &textBrush);
+                graphics.DrawString(L"PAUSED", -1, &font, PointF(14, 12), &textBrush);
             }
             
             EndPaint(hWnd, &ps);

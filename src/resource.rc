@@ -2,7 +2,7 @@
 #include <windows.h>
 
 // Seko Screenshot Settings - Compact & Elegant
-IDD_SETTINGS DIALOGEX 0, 0, 180, 320
+IDD_SETTINGS DIALOGEX 0, 0, 180, 390
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU | DS_CENTER
 CAPTION "Seko Settings"
 FONT 8, "Segoe UI"
@@ -39,9 +39,16 @@ BEGIN
     
     CONTROL "Auto-upload videos", IDC_VIDEO_AUTO_UPLOAD, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 20, 260, 130, 12
     
+    // Video Hotkeys section
+    GROUPBOX "Video Hotkeys", IDC_STATIC, 10, 285, 160, 70
+    LTEXT "Record/Stop:", IDC_STATIC, 20, 300, 60, 8
+    EDITTEXT IDC_VIDEO_HOTKEY_DISPLAY, 20, 310, 140, 18, ES_READONLY | WS_BORDER
+    LTEXT "Pause/Resume:", IDC_STATIC, 20, 332, 60, 8
+    EDITTEXT IDC_VIDEO_PAUSE_HOTKEY_DISPLAY, 20, 342, 140, 18, ES_READONLY | WS_BORDER
+    
     // Buttons
-    DEFPUSHBUTTON "Save", IDOK, 50, 290, 55, 20
-    PUSHBUTTON "Cancel", IDCANCEL, 115, 290, 55, 20
+    DEFPUSHBUTTON "Save", IDOK, 50, 365, 55, 20
+    PUSHBUTTON "Cancel", IDCANCEL, 115, 365, 55, 20
 END
 
 // Application icon
