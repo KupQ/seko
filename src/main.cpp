@@ -32,6 +32,7 @@ ULONG_PTR g_gdiplusToken;
 int g_hotkeyId = 1;
 int g_hotkeyRegionId = 2;
 int g_hotkeyVideoId = 3;
+int g_hotkeyVideoPauseId = 4;
 AppSettings g_settings;
 VideoRecorder g_videoRecorder;
 VideoControls g_videoControls;
@@ -127,6 +128,15 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 } else {
                     // Start recording
                     CaptureVideo();
+                }
+            } else if (wParam == g_hotkeyVideoPauseId) {
+                // Pause/Resume recording
+                if (g_videoRecorder.IsRecording()) {
+                    if (g_videoRecorder.IsPaused()) {
+                        g_videoRecorder.Resume();
+                    } else {
+                        g_videoRecorder.Pause();
+                    }
                 }
             }
             return 0;
@@ -425,12 +435,16 @@ void RegisterHotkeys() {
     
     // Default video hotkey: Ctrl+Shift+V
     RegisterHotKey(g_hwndMain, g_hotkeyVideoId, MOD_CONTROL | MOD_SHIFT, 'V'); 
+    
+    // Pause/Resume hotkey: Ctrl+Shift+P
+    RegisterHotKey(g_hwndMain, g_hotkeyVideoPauseId, MOD_CONTROL | MOD_SHIFT, 'P');
 }
 
 void UnregisterHotkeys() {
     UnregisterHotKey(g_hwndMain, g_hotkeyId);
     UnregisterHotKey(g_hwndMain, g_hotkeyRegionId);
     UnregisterHotKey(g_hwndMain, g_hotkeyVideoId);
+    UnregisterHotKey(g_hwndMain, g_hotkeyVideoPauseId);
 }
 
 std::wstring GetKeyName(UINT vk, UINT mods) {
