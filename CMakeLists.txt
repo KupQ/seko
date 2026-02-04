@@ -18,6 +18,7 @@ add_executable(seko WIN32
     src/settings.cpp
     src/video_recorder.cpp
     src/video_controls.cpp
+    src/recording_indicator.cpp
     src/resource.rc
 )
 
