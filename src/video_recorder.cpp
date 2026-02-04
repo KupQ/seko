@@ -106,7 +106,7 @@ bool VideoRecorder::InitializeSinkWriter(const std::wstring& outputPath) {
 
     m_isRecording = true;
     m_startTime = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::high_resolution_clock::now().time_since_epoch()
+        std::chrono::steady_clock::now().time_since_epoch()
     ).count();
 
     return true;
@@ -149,7 +149,7 @@ bool VideoRecorder::WriteFrame(const std::vector<BYTE>& frameData) {
 
     // Calculate timestamp
     LONGLONG currentTime = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::high_resolution_clock::now().time_since_epoch()
+        std::chrono::steady_clock::now().time_since_epoch()
     ).count();
     
     // Adjust for pauses and start time
@@ -176,7 +176,7 @@ bool VideoRecorder::Pause() {
     
     m_isPaused = true;
     m_lastPauseTime = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::high_resolution_clock::now().time_since_epoch()
+        std::chrono::steady_clock::now().time_since_epoch()
     ).count();
     
     return true;
@@ -186,7 +186,7 @@ bool VideoRecorder::Resume() {
     if (!m_isRecording || !m_isPaused) return false;
     
     LONGLONG currentTime = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::high_resolution_clock::now().time_since_epoch()
+        std::chrono::steady_clock::now().time_since_epoch()
     ).count();
     
     m_totalPausedDuration += (currentTime - m_lastPauseTime);
