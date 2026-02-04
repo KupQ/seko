@@ -546,6 +546,8 @@ LRESULT CALLBACK HotkeyEditProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
 static UINT g_fullscreenData[2] = {0};
 static UINT g_regionData[2] = {0};
+static UINT g_videoData[2] = {0};
+static UINT g_videoPauseData[2] = {0};
 
 INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
@@ -568,9 +570,23 @@ INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lPar
             SetWindowSubclass(hFullscreen, HotkeyEditProc, 1, (DWORD_PTR)g_fullscreenData);
             SetWindowSubclass(hRegion, HotkeyEditProc, 2, (DWORD_PTR)g_regionData);
             
+            // Subclass video hotkey controls
+            HWND hVideo = GetDlgItem(hDlg, IDC_VIDEO_HOTKEY_DISPLAY);
+            HWND hVideoPause = GetDlgItem(hDlg, IDC_VIDEO_PAUSE_HOTKEY_DISPLAY);
+            
+            g_videoData[0] = 'V';
+            g_videoData[1] = MOD_CONTROL | MOD_SHIFT;
+            g_videoPauseData[0] = 'P';
+            g_videoPauseData[1] = MOD_CONTROL | MOD_SHIFT;
+            
+            SetWindowSubclass(hVideo, HotkeyEditProc, 3, (DWORD_PTR)g_videoData);
+            SetWindowSubclass(hVideoPause, HotkeyEditProc, 4, (DWORD_PTR)g_videoPauseData);
+            
             // Display current hotkeys
             SetWindowText(hFullscreen, GetKeyName(g_settings.fullscreenKey, g_settings.fullscreenModifiers).c_str());
             SetWindowText(hRegion, GetKeyName(g_settings.regionKey, g_settings.regionModifiers).c_str());
+            SetWindowText(hVideo, GetKeyName(g_videoData[0], g_videoData[1]).c_str());
+            SetWindowText(hVideoPause, GetKeyName(g_videoPauseData[0], g_videoPauseData[1]).c_str());
             
             // Set auto-start checkbox
             CheckDlgButton(hDlg, IDC_AUTOSTART, g_settings.autoStart ? BST_CHECKED : BST_UNCHECKED);
