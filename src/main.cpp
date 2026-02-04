@@ -14,7 +14,6 @@
 #include "settings.h"
 #include "video_recorder.h"
 #include "video_controls.h"
-#include "recording_indicator.h"
 #include <thread>
 #include <atomic>
 
@@ -37,7 +36,6 @@ int g_hotkeyVideoPauseId = 4;
 AppSettings g_settings;
 VideoRecorder g_videoRecorder;
 VideoControls g_videoControls;
-RecordingIndicator g_recordingIndicator;
 std::atomic<bool> g_isRecordingThreadRunning(false);
 std::thread g_recordingThread;
 
@@ -136,10 +134,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 if (g_videoRecorder.IsRecording()) {
                     if (g_videoRecorder.IsPaused()) {
                         g_videoRecorder.Resume();
-                        g_recordingIndicator.UpdateState(false);
                     } else {
                         g_videoRecorder.Pause();
-                        g_recordingIndicator.UpdateState(true);
                     }
                 }
             }
@@ -275,9 +271,6 @@ void StopVideoRecording() {
     if (g_videoRecorder.IsRecording()) {
         g_videoRecorder.Stop();
         
-        // Hide indicator
-        g_recordingIndicator.Hide();
-        
         // Wait for thread to finish
         if (g_isRecordingThreadRunning) {
             if (g_recordingThread.joinable()) {
@@ -345,9 +338,6 @@ void CaptureVideo() {
         MessageBox(NULL, L"Failed to initialize video recorder", L"Error", MB_OK | MB_ICONERROR);
         return;
     }
-    
-    // Show recording indicator
-    g_recordingIndicator.Show(rect);
     
     // Start Recording Thread (no UI controls)
     g_isRecordingThreadRunning = true;
