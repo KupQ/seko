@@ -559,6 +559,12 @@ INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lPar
                 SetDlgItemText(hDlg, IDC_API_KEY_STATUS, L"Saved");
             }
             
+            // Load video settings
+            SetDlgItemInt(hDlg, IDC_VIDEO_FPS, g_settings.videoFPS, FALSE);
+            SetDlgItemInt(hDlg, IDC_VIDEO_BITRATE, g_settings.videoBitrate / 1000000, FALSE); // Convert to Mbps
+            SetDlgItemText(hDlg, IDC_VIDEO_PATH, g_settings.videoSavePath.c_str());
+            CheckDlgButton(hDlg, IDC_VIDEO_AUTO_UPLOAD, g_settings.videoAutoUpload ? BST_CHECKED : BST_UNCHECKED);
+            
             return TRUE;
         }
         
@@ -601,6 +607,20 @@ INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lPar
                     GetDlgItemText(hDlg, IDC_API_KEY_EDIT, apiKeyBuffer, 256);
                     g_settings.apiKey = apiKeyBuffer;
                     
+                    // Get video settings
+                    g_settings.videoFPS = GetDlgItemInt(hDlg, IDC_VIDEO_FPS, NULL, FALSE);
+                    if (g_settings.videoFPS < 30) g_settings.videoFPS = 30;
+                    if (g_settings.videoFPS > 144) g_settings.videoFPS = 144;
+                    
+                    UINT bitrateMbps = GetDlgItemInt(hDlg, IDC_VIDEO_BITRATE, NULL, FALSE);
+                    g_settings.videoBitrate = bitrateMbps * 1000000; // Convert to bps
+                    
+                    wchar_t videoPathBuffer[MAX_PATH];
+                    GetDlgItemText(hDlg, IDC_VIDEO_PATH, videoPathBuffer, MAX_PATH);
+                    g_settings.videoSavePath = videoPathBuffer;
+                    
+                    g_settings.videoAutoUpload = (IsDlgButtonChecked(hDlg, IDC_VIDEO_AUTO_UPLOAD) == BST_CHECKED);
+                    
                     // Save settings
                     SaveSettings(g_settings);
                     
@@ -638,6 +658,24 @@ INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lPar
                         SaveSettings(g_settings);
                     } else {
                         SetDlgItemText(hDlg, IDC_API_KEY_STATUS, L"[ERROR] Invalid API key");
+                    }
+                    return TRUE;
+                }
+                
+                case IDC_VIDEO_BROWSE: {
+                    // Browse for folder
+                    wchar_t folderPath[MAX_PATH] = {0};
+                    BROWSEINFO bi = {0};
+                    bi.hwndOwner = hDlg;
+                    bi.lpszTitle = L"Select Video Save Folder";
+                    bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
+                    
+                    LPITEMIDLIST pidl = SHBrowseForFolder(&bi);
+                    if (pidl) {
+                        if (SHGetPathFromIDList(pidl, folderPath)) {
+                            SetDlgItemText(hDlg, IDC_VIDEO_PATH, folderPath);
+                        }
+                        CoTaskMemFree(pidl);
                     }
                     return TRUE;
                 }
