@@ -1,5 +1,6 @@
 #include <windows.h>
 #include <shellapi.h>
+#include <shlobj.h>
 #include <gdiplus.h>
 #include <winhttp.h>
 #include <commctrl.h>
