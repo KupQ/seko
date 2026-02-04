@@ -81,11 +81,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
     // Load settings
     g_settings = LoadSettings();
     
-    // Initialize Video Controls
-    g_videoControls.Initialize(g_hInst, NULL); // Parent is NULL for global floating window
-    g_videoControls.OnPause = []() { g_videoRecorder.Pause(); g_videoControls.UpdateState(true); };
-    g_videoControls.OnResume = []() { g_videoRecorder.Resume(); g_videoControls.UpdateState(false); };
-    g_videoControls.OnStop = []() { StopVideoRecording(); };
+    // Create video save directory if it doesn't exist
+    CreateDirectory(g_settings.videoSavePath.c_str(), NULL);
     
     // Create system tray icon
     g_nid.cbSize = sizeof(NOTIFYICONDATA);
@@ -123,7 +120,13 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             } else if (wParam == g_hotkeyRegionId) {
                 CaptureScreenshot(true);
             } else if (wParam == g_hotkeyVideoId) {
-                CaptureVideo();
+                if (g_videoRecorder.IsRecording()) {
+                    // Stop recording
+                    StopVideoRecording();
+                } else {
+                    // Start recording
+                    CaptureVideo();
+                }
             }
             return 0;
             
@@ -257,9 +260,6 @@ void StopVideoRecording() {
     if (g_videoRecorder.IsRecording()) {
         g_videoRecorder.Stop();
         
-        // Hide controls
-        g_videoControls.Hide();
-        
         // Wait for thread to finish
         if (g_isRecordingThreadRunning) {
             if (g_recordingThread.joinable()) {
@@ -269,11 +269,24 @@ void StopVideoRecording() {
         }
         
         std::wstring path = g_videoRecorder.GetOutputPath();
-        std::wstring msg = L"Video saved to:\n" + path;
-        MessageBox(NULL, msg.c_str(), L"Recording Finished", MB_OK | MB_ICONINFORMATION); // Replace with Upload later
         
-        // Ask to open folder?
-        ShellExecute(NULL, L"open", L"explorer.exe", (L"/select,\"" + path + L"\"").c_str(), NULL, SW_SHOWDEFAULT);
+        // Auto-upload if enabled
+        if (g_settings.videoAutoUpload && !g_settings.apiKey.empty()) {
+            ShowUploadingToast();
+            std::wstring url = UploadFileToNekoo(path, g_settings.apiKey);
+            
+            if (!url.empty()) {
+                UpdateToastWithUrl(url);
+            } else {
+                CloseToast();
+                std::wstring msg = L"Video saved to:\n" + path + L"\n\nUpload failed!";
+                MessageBox(NULL, msg.c_str(), L"Recording Finished", MB_OK | MB_ICONWARNING);
+            }
+        } else {
+            std::wstring msg = L"Video saved to:\n" + path;
+            MessageBox(NULL, msg.c_str(), L"Recording Finished", MB_OK | MB_ICONINFORMATION);
+            ShellExecute(NULL, L"open", L"explorer.exe", (L"/select,\"" + path + L"\"").c_str(), NULL, SW_SHOWDEFAULT);
+        }
     }
 }
 
@@ -298,21 +311,21 @@ void CaptureVideo() {
     rect.right = rect.left + w;
     rect.bottom = rect.top + h;
     
-    // Temp file path
-    wchar_t tempPath[MAX_PATH];
-    GetTempPath(MAX_PATH, tempPath);
-    std::wstring outputPath = std::wstring(tempPath) + L"nekoos_recording.mp4";
+    // Generate output path with timestamp
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    wchar_t timestamp[64];
+    swprintf_s(timestamp, L"seko_%04d%02d%02d_%02d%02d%02d.mp4", 
+               st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+    std::wstring outputPath = g_settings.videoSavePath + L"\\" + timestamp;
     
-    // Initialize Recorder
-    if (!g_videoRecorder.Initialize(outputPath, w, h, 30)) { // 30 FPS for GDI safety
+    // Initialize Recorder with settings
+    if (!g_videoRecorder.Initialize(outputPath, w, h, g_settings.videoFPS, g_settings.videoBitrate)) {
         MessageBox(NULL, L"Failed to initialize video recorder", L"Error", MB_OK | MB_ICONERROR);
         return;
     }
     
-    // Show Controls
-    g_videoControls.Show(rect.left, rect.bottom + 5);
-    
-    // Start Recording Thread
+    // Start Recording Thread (no UI controls)
     g_isRecordingThreadRunning = true;
     g_recordingThread = std::thread([rect, w, h]() {
         HDC hScreen = GetDC(NULL);
@@ -331,7 +344,7 @@ void CaptureVideo() {
                 BITMAPINFOHEADER bi = {0};
                 bi.biSize = sizeof(BITMAPINFOHEADER);
                 bi.biWidth = w;
-                bi.biHeight = -h; // Top-down
+                bi.biHeight = h; // Positive height for bottom-up DIB (standard for MF)
                 bi.biPlanes = 1;
                 bi.biBitCount = 32;
                 bi.biCompression = BI_RGB;
@@ -343,11 +356,12 @@ void CaptureVideo() {
                 g_videoRecorder.WriteFrame(pixels);
             }
             
-            // Frame pacing (aim for ~33ms for 30fps)
+            // Frame pacing
             auto end = std::chrono::steady_clock::now();
             auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-            if (elapsed < 33) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(33 - elapsed));
+            int targetFrameTime = 1000 / g_settings.videoFPS;
+            if (elapsed < targetFrameTime) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(targetFrameTime - elapsed));
             }
         }
         

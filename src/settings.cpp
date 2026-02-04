@@ -1,7 +1,9 @@
 #include "settings.h"
 #include <windows.h>
+#include <shlobj.h>
 #include <winhttp.h>
 #pragma comment(lib, "winhttp.lib")
+#pragma comment(lib, "shell32.lib")
 
 #define REGISTRY_KEY L"Software\\Seko\\Screenshot"
 #define AUTOSTART_KEY L"Software\\Microsoft\\Windows\\CurrentVersion\\Run"
@@ -17,6 +19,14 @@ AppSettings LoadSettings() {
     settings.regionKey = 'R';
     settings.autoStart = false;
     settings.apiKey = L"";
+    
+    // Video defaults
+    wchar_t documentsPath[MAX_PATH];
+    SHGetFolderPath(NULL, CSIDL_MYDOCUMENTS, NULL, 0, documentsPath);
+    settings.videoSavePath = std::wstring(documentsPath) + L"\\Seko Videos";
+    settings.videoFPS = 60;
+    settings.videoBitrate = 8000000; // 8 Mbps
+    settings.videoAutoUpload = false;
     
     HKEY hKey;
     if (RegOpenKeyEx(HKEY_CURRENT_USER, REGISTRY_KEY, 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
@@ -41,6 +51,25 @@ AppSettings LoadSettings() {
         dwSize = sizeof(apiKeyBuffer);
         if (RegQueryValueEx(hKey, L"ApiKey", NULL, NULL, (LPBYTE)apiKeyBuffer, &dwSize) == ERROR_SUCCESS) {
             settings.apiKey = apiKeyBuffer;
+        }
+        
+        // Load video settings
+        wchar_t videoPathBuffer[MAX_PATH] = {0};
+        dwSize = sizeof(videoPathBuffer);
+        if (RegQueryValueEx(hKey, L"VideoSavePath", NULL, NULL, (LPBYTE)videoPathBuffer, &dwSize) == ERROR_SUCCESS) {
+            settings.videoSavePath = videoPathBuffer;
+        }
+        
+        if (RegQueryValueEx(hKey, L"VideoFPS", NULL, NULL, (LPBYTE)&dwValue, &dwSize) == ERROR_SUCCESS) {
+            settings.videoFPS = dwValue;
+        }
+        
+        if (RegQueryValueEx(hKey, L"VideoBitrate", NULL, NULL, (LPBYTE)&dwValue, &dwSize) == ERROR_SUCCESS) {
+            settings.videoBitrate = dwValue;
+        }
+        
+        if (RegQueryValueEx(hKey, L"VideoAutoUpload", NULL, NULL, (LPBYTE)&dwValue, &dwSize) == ERROR_SUCCESS) {
+            settings.videoAutoUpload = (dwValue != 0);
         }
         
         RegCloseKey(hKey);
@@ -71,6 +100,19 @@ void SaveSettings(const AppSettings& settings) {
         // Save API key
         RegSetValueEx(hKey, L"ApiKey", 0, REG_SZ, (LPBYTE)settings.apiKey.c_str(), 
                      (DWORD)((settings.apiKey.length() + 1) * sizeof(wchar_t)));
+        
+        // Save video settings
+        RegSetValueEx(hKey, L"VideoSavePath", 0, REG_SZ, (LPBYTE)settings.videoSavePath.c_str(),
+                     (DWORD)((settings.videoSavePath.length() + 1) * sizeof(wchar_t)));
+        
+        dwValue = settings.videoFPS;
+        RegSetValueEx(hKey, L"VideoFPS", 0, REG_DWORD, (LPBYTE)&dwValue, sizeof(DWORD));
+        
+        dwValue = settings.videoBitrate;
+        RegSetValueEx(hKey, L"VideoBitrate", 0, REG_DWORD, (LPBYTE)&dwValue, sizeof(DWORD));
+        
+        dwValue = settings.videoAutoUpload ? 1 : 0;
+        RegSetValueEx(hKey, L"VideoAutoUpload", 0, REG_DWORD, (LPBYTE)&dwValue, sizeof(DWORD));
         
         RegCloseKey(hKey);
     }
