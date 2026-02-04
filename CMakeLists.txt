@@ -16,6 +16,8 @@ add_executable(seko WIN32
     src/overlay.cpp
     src/toast.cpp
     src/settings.cpp
+    src/video_recorder.cpp
+    src/video_controls.cpp
     src/resource.rc
 )
 
@@ -24,6 +26,10 @@ target_link_libraries(seko
     winhttp
     shell32
     comctl32
+    mf
+    mfplat
+    mfreadwrite
+    mfuuid
 )
 
 # Set application icon

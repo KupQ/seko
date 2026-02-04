@@ -11,6 +11,10 @@
 #include "overlay.h"
 #include "toast.h"
 #include "settings.h"
+#include "video_recorder.h"
+#include "video_controls.h"
+#include <thread>
+#include <atomic>
 
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "gdiplus.lib")
@@ -26,7 +30,12 @@ HWND g_hwndMain;
 ULONG_PTR g_gdiplusToken;
 int g_hotkeyId = 1;
 int g_hotkeyRegionId = 2;
+int g_hotkeyVideoId = 3;
 AppSettings g_settings;
+VideoRecorder g_videoRecorder;
+VideoControls g_videoControls;
+std::atomic<bool> g_isRecordingThreadRunning(false);
+std::thread g_recordingThread;
 
 // Forward declarations
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
@@ -39,12 +48,15 @@ std::vector<BYTE> CaptureFullscreen();
 void RegisterHotkeys();
 void UnregisterHotkeys();
 std::wstring GetKeyName(UINT vk, UINT mods);
+void CaptureVideo();
+void StopVideoRecording();
 
 // System tray menu IDs
 #define IDM_CAPTURE_FULL 1001
 #define IDM_CAPTURE_REGION 1002
-#define IDM_SETTINGS 1003
-#define IDM_EXIT 1004
+#define IDM_CAPTURE_VIDEO 1003
+#define IDM_SETTINGS 1004
+#define IDM_EXIT 1005
 #define WM_TRAYICON (WM_USER + 1)
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
@@ -68,6 +80,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int) {
     
     // Load settings
     g_settings = LoadSettings();
+    
+    // Initialize Video Controls
+    g_videoControls.Initialize(g_hInst, NULL); // Parent is NULL for global floating window
+    g_videoControls.OnPause = []() { g_videoRecorder.Pause(); g_videoControls.UpdateState(true); };
+    g_videoControls.OnResume = []() { g_videoRecorder.Resume(); g_videoControls.UpdateState(false); };
+    g_videoControls.OnStop = []() { StopVideoRecording(); };
     
     // Create system tray icon
     g_nid.cbSize = sizeof(NOTIFYICONDATA);
@@ -104,6 +122,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 CaptureScreenshot(false);
             } else if (wParam == g_hotkeyRegionId) {
                 CaptureScreenshot(true);
+            } else if (wParam == g_hotkeyVideoId) {
+                CaptureVideo();
             }
             return 0;
             
@@ -115,6 +135,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 HMENU hMenu = CreatePopupMenu();
                 AppendMenu(hMenu, MF_STRING, IDM_CAPTURE_FULL, L"Capture Fullscreen (Ctrl+Shift+S)");
                 AppendMenu(hMenu, MF_STRING, IDM_CAPTURE_REGION, L"Capture Region (Ctrl+Shift+R)");
+                AppendMenu(hMenu, MF_STRING, IDM_CAPTURE_VIDEO, L"Record Video (Ctrl+Shift+V)");
                 AppendMenu(hMenu, MF_SEPARATOR, 0, NULL);
                 AppendMenu(hMenu, MF_STRING, IDM_SETTINGS, L"Settings");
                 AppendMenu(hMenu, MF_SEPARATOR, 0, NULL);
@@ -134,6 +155,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     break;
                 case IDM_CAPTURE_REGION:
                     CaptureScreenshot(true);
+                    break;
+                case IDM_CAPTURE_VIDEO:
+                    CaptureVideo();
                     break;
                 case IDM_SETTINGS:
                     ShowSettingsDialog();
@@ -229,6 +253,112 @@ std::vector<BYTE> CaptureRegion(const RECT& rect) {
     return data;
 }
 
+void StopVideoRecording() {
+    if (g_videoRecorder.IsRecording()) {
+        g_videoRecorder.Stop();
+        
+        // Hide controls
+        g_videoControls.Hide();
+        
+        // Wait for thread to finish
+        if (g_isRecordingThreadRunning) {
+            if (g_recordingThread.joinable()) {
+                g_recordingThread.join();
+            }
+            g_isRecordingThreadRunning = false;
+        }
+        
+        std::wstring path = g_videoRecorder.GetOutputPath();
+        std::wstring msg = L"Video saved to:\n" + path;
+        MessageBox(NULL, msg.c_str(), L"Recording Finished", MB_OK | MB_ICONINFORMATION); // Replace with Upload later
+        
+        // Ask to open folder?
+        ShellExecute(NULL, L"open", L"explorer.exe", (L"/select,\"" + path + L"\"").c_str(), NULL, SW_SHOWDEFAULT);
+    }
+}
+
+void CaptureVideo() {
+    if (g_videoRecorder.IsRecording()) {
+        MessageBox(NULL, L"Already recording!", L"Error", MB_OK | MB_ICONEXCLAMATION);
+        return;
+    }
+
+    RECT rect = {0};
+    ShowOverlay(g_hwndMain, &rect, CaptureMode::Video);
+    
+    if (rect.right == 0 && rect.bottom == 0) {
+        return; // Cancelled
+    }
+    
+    // Ensure even dimensions
+    int w = rect.right - rect.left;
+    int h = rect.bottom - rect.top;
+    if (w % 2 != 0) w++;
+    if (h % 2 != 0) h++;
+    rect.right = rect.left + w;
+    rect.bottom = rect.top + h;
+    
+    // Temp file path
+    wchar_t tempPath[MAX_PATH];
+    GetTempPath(MAX_PATH, tempPath);
+    std::wstring outputPath = std::wstring(tempPath) + L"nekoos_recording.mp4";
+    
+    // Initialize Recorder
+    if (!g_videoRecorder.Initialize(outputPath, w, h, 30)) { // 30 FPS for GDI safety
+        MessageBox(NULL, L"Failed to initialize video recorder", L"Error", MB_OK | MB_ICONERROR);
+        return;
+    }
+    
+    // Show Controls
+    g_videoControls.Show(rect.left, rect.bottom + 5);
+    
+    // Start Recording Thread
+    g_isRecordingThreadRunning = true;
+    g_recordingThread = std::thread([rect, w, h]() {
+        HDC hScreen = GetDC(NULL);
+        HDC hDC = CreateCompatibleDC(hScreen);
+        HBITMAP hBmp = CreateCompatibleBitmap(hScreen, w, h);
+        HGDIOBJ hOld = SelectObject(hDC, hBmp);
+        
+        while (g_videoRecorder.IsRecording()) {
+            auto start = std::chrono::high_resolution_clock::now();
+            
+            if (!g_videoRecorder.IsPaused()) {
+                // Capture Frame
+                BitBlt(hDC, 0, 0, w, h, hScreen, rect.left, rect.top, SRCCOPY);
+                
+                // Get bits
+                BITMAPINFOHEADER bi = {0};
+                bi.biSize = sizeof(BITMAPINFOHEADER);
+                bi.biWidth = w;
+                bi.biHeight = -h; // Top-down
+                bi.biPlanes = 1;
+                bi.biBitCount = 32;
+                bi.biCompression = BI_RGB;
+                
+                std::vector<BYTE> pixels(w * h * 4);
+                GetDIBits(hDC, hBmp, 0, h, pixels.data(), (BITMAPINFO*)&bi, DIB_RGB_COLORS);
+                
+                // Write to Media Foundation
+                g_videoRecorder.WriteFrame(pixels);
+            }
+            
+            // Frame pacing (aim for ~33ms for 30fps)
+            auto end = std::chrono::high_resolution_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+            if (elapsed < 33) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(33 - elapsed));
+            }
+        }
+        
+        SelectObject(hDC, hOld);
+        DeleteObject(hBmp);
+        DeleteDC(hDC);
+        ReleaseDC(NULL, hScreen);
+    });
+    g_recordingThread.detach(); // Detach to allow UI thread to continue handling messages
+}
+
 void CaptureScreenshot(bool useRegion) {
     std::vector<BYTE> imageData;
     
@@ -277,11 +407,15 @@ void ShowSettingsDialog() {
 void RegisterHotkeys() {
     RegisterHotKey(g_hwndMain, g_hotkeyId, g_settings.fullscreenModifiers, g_settings.fullscreenKey);
     RegisterHotKey(g_hwndMain, g_hotkeyRegionId, g_settings.regionModifiers, g_settings.regionKey);
+    
+    // Default video hotkey: Ctrl+Shift+V
+    RegisterHotKey(g_hwndMain, g_hotkeyVideoId, MOD_CONTROL | MOD_SHIFT, 'V'); 
 }
 
 void UnregisterHotkeys() {
     UnregisterHotKey(g_hwndMain, g_hotkeyId);
     UnregisterHotKey(g_hwndMain, g_hotkeyRegionId);
+    UnregisterHotKey(g_hwndMain, g_hotkeyVideoId);
 }
 
 std::wstring GetKeyName(UINT vk, UINT mods) {

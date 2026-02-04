@@ -17,10 +17,11 @@ static bool g_bDragging = false;
 static RECT g_selectedRect = {0};
 static bool g_bCancelled = false;
 static bool g_bDone = false;
+static CaptureMode g_captureMode = CaptureMode::Screenshot;
 
 LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-void ShowOverlay(HWND hwndParent, RECT* pRect) {
+void ShowOverlay(HWND hwndParent, RECT* pRect, CaptureMode mode) {
     // Register overlay window class
     static bool registered = false;
     if (!registered) {
@@ -35,6 +36,8 @@ void ShowOverlay(HWND hwndParent, RECT* pRect) {
     }
     
     // Reset state
+    // Reset state
+    g_captureMode = mode;
     g_bSelecting = false;
     g_bDragging = false;
     g_bCancelled = false;
@@ -139,7 +142,10 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 SolidBrush instructTextBrush(Color(255, 255, 255, 255));
                 SolidBrush instructBgBrush(Color(200, 0, 0, 0));
                 
-                const wchar_t* instructText = L"Click and drag to select region (ESC to cancel)";
+                const wchar_t* instructText = (g_captureMode == CaptureMode::Video) ? 
+                    L"Click and drag to record video (ESC to cancel)" : 
+                    L"Click and drag to select region (ESC to cancel)";
+                    
                 RectF instructRect;
                 graphics.MeasureString(instructText, -1, &instructFont, PointF(0, 0), &instructRect);
                 
@@ -176,9 +182,11 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                     SolidBrush clearBrush(Color(0, 0, 0, 0));
                     graphics.FillRectangle(&clearBrush, x, y, w, h);
                     
-                    // Draw purple border
+                    // Draw border (Purple for Screenshot, Red for Video)
                     graphics.SetCompositingMode(CompositingModeSourceOver);
-                    Pen borderPen(Color(255, 139, 92, 246), 2);
+                    Color borderColor = (g_captureMode == CaptureMode::Video) ? 
+                        Color(255, 255, 50, 50) : Color(255, 139, 92, 246);
+                    Pen borderPen(borderColor, 2);
                     graphics.DrawRectangle(&borderPen, x, y, w, h);
                     
                     // Draw dimensions

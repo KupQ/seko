@@ -1,4 +1,9 @@
 #pragma once
 #include <windows.h>
 
-void ShowOverlay(HWND hwndParent, RECT* pRect);
+enum class CaptureMode {
+    Screenshot,
+    Video
+};
+
+void ShowOverlay(HWND hwndParent, RECT* pRect, CaptureMode mode = CaptureMode::Screenshot);
