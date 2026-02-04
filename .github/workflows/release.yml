@@ -1,0 +1,79 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-x64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/setup-msbuild@v2
+      - run: choco install innosetup -y
+      - run: cmake -B build -G "Visual Studio 17 2022" -A x64
+      - run: cmake --build build --config Release
+      - run: |
+          Copy-Item installer\setup.iss installer\setup-x64.iss
+          (Get-Content installer\setup-x64.iss) -replace 'seko-setup', 'seko-setup-x64' | Set-Content installer\setup-x64.iss
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\setup-x64.iss
+      - uses: actions/upload-artifact@v4
+        with:
+          name: x64-files
+          path: |
+            build/Release/seko.exe
+            installer/seko-setup-x64.exe
+
+  build-x32:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/setup-msbuild@v2
+      - run: choco install innosetup -y
+      - run: cmake -B build -G "Visual Studio 17 2022" -A Win32
+      - run: cmake --build build --config Release
+      - run: |
+          Copy-Item installer\setup.iss installer\setup-x32.iss
+          (Get-Content installer\setup-x32.iss) -replace 'seko-setup', 'seko-setup-x32' | Set-Content installer\setup-x32.iss
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\setup-x32.iss
+      - uses: actions/upload-artifact@v4
+        with:
+          name: x32-files
+          path: |
+            build/Release/seko.exe
+            installer/seko-setup-x32.exe
+
+  release:
+    needs: [build-x64, build-x32]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/download-artifact@v4
+      - run: |
+          mv x64-files/build/Release/seko.exe seko-x64.exe
+          mv x32-files/build/Release/seko.exe seko-x32.exe
+          mv x64-files/installer/seko-setup-x64.exe .
+          mv x32-files/installer/seko-setup-x32.exe .
+      - uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'manual-build' }}
+          name: ${{ github.ref_type == 'tag' && github.ref_name || 'Manual Debug Build' }}
+          draft: ${{ github.event_name == 'workflow_dispatch' }}
+          prerelease: ${{ github.event_name == 'workflow_dispatch' }}
+          files: |
+            seko-x64.exe
+            seko-x32.exe
+            seko-setup-x64.exe
+            seko-setup-x32.exe
+          body: |
+            ## Seko Screenshot Tool
+            
+            **Download:**
+            - `seko-setup-x64.exe` - 64-bit installer
+            - `seko-setup-x32.exe` - 32-bit installer
+            
+            Powered by nekoo.ru
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
