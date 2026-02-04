@@ -77,6 +77,16 @@ void ShowOverlay(HWND hwndParent, RECT* pRect, CaptureMode mode) {
     } else {
         *pRect = g_selectedRect;
     }
+    
+    // CRITICAL: Ensure overlay is completely destroyed and screen is refreshed
+    if (g_hwndOverlay) {
+        DestroyWindow(g_hwndOverlay);
+        g_hwndOverlay = NULL;
+    }
+    
+    // Force screen repaint to remove any overlay artifacts
+    InvalidateRect(NULL, NULL, TRUE);
+    UpdateWindow(GetDesktopWindow());
 }
 
 LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {

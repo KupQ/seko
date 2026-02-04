@@ -322,7 +322,7 @@ void CaptureVideo() {
     }
     
     // CRITICAL: Wait for overlay window to fully close and screen to refresh
-    Sleep(200); // 200ms delay to ensure overlay is completely gone
+    Sleep(500); // 500ms delay to ensure overlay is completely gone and screen refreshed
     
     // Ensure even dimensions
     int w = rect.right - rect.left;
