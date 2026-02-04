@@ -24,8 +24,8 @@ AppSettings LoadSettings() {
     wchar_t documentsPath[MAX_PATH];
     SHGetFolderPath(NULL, CSIDL_MYDOCUMENTS, NULL, 0, documentsPath);
     settings.videoSavePath = std::wstring(documentsPath) + L"\\Seko Videos";
-    settings.videoFPS = 60;
-    settings.videoBitrate = 8000000; // 8 Mbps
+    settings.videoFPS = 120;
+    settings.videoBitrate = 50000000; // 50 Mbps
     settings.videoAutoUpload = false;
     
     HKEY hKey;
